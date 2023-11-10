@@ -1,31 +1,33 @@
 package com.supply.logistics.service;
 
-import com.scm.UserOrder;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.supply.logistics.entity.OrderStatus;
+import com.supply.logistics.entity.UserOrders;
+import com.supply.logistics.repo.UserOrderRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
+import java.util.Optional;
 
+@Slf4j
 @Service
+@RequiredArgsConstructor
 public class LogisticsService {
-    private static final Logger LOGGER = LoggerFactory.getLogger(LogisticsService.class);
-
-    @Autowired
-    private OrderUpdateService orderUpdateService; // Add @Autowired annotation here
-
-    private final KafkaTemplate<String, String> kafkaTemplate;
-
-    public LogisticsService(KafkaTemplate<String, String> kafkaTemplate, OrderUpdateService orderUpdateService) {
-        this.kafkaTemplate = kafkaTemplate;
-        this.orderUpdateService = orderUpdateService; // Inject OrderUpdateService here
-    }
+    private final UserOrderRepository userOrderRepository;
+    private final OrderUpdateService orderUpdateService;
+    private final KafkaTemplate<String, UserOrders> kafkaTemplate;
+    private final ObjectMapper objectMapper;
 
     @KafkaListener(topics = "${spring.kafka.topic.name.OrderFulfillment}", groupId = "${spring.kafka.consumer.group-id.OrderFulfillment}")
-    public void consumeOrderFulfillmentTopic(String message) {
-        LOGGER.info("Received message from OrderFulfillment topic: {} and ready for be shipped", message);
-        orderUpdateService.sendProductShippedMessage();
+    public void consumeOrderFulfillmentTopic(String userOrdersAsString) throws JsonProcessingException {
+        UserOrders userOrders = objectMapper.readValue(userOrdersAsString, UserOrders.class);
+
+        userOrders.setOrderStatus(OrderStatus.DELIVERED);
+        userOrderRepository.save(userOrders);
+        log.info("Order Status -> {}", userOrders.getOrderStatus());
     }
 }
